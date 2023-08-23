@@ -61,7 +61,7 @@ def search_and_answer(query):
 
 def get_weather_forecast(city, day):
     # Replace 'YOUR_API_KEY' with your actual OpenWeather API key
-    api_key = '0ebee6bfb6a55b6a6913af3abb55e93b'
+    api_key = 'YOUR_API_KEY'
     base_url = f'http://api.openweathermap.org/data/2.5/forecast'
 
     # Construct the request parameters

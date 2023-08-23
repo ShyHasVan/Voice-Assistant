@@ -1,0 +1,161 @@
+import speech_recognition as sr
+import pyttsx3
+from googlesearch import search
+import requests
+from bs4 import BeautifulSoup
+import json
+import datetime
+
+def recognize_speech():
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("Calibrating microphone for ambient noise...")
+        recognizer.adjust_for_ambient_noise(source, duration=1)  # Calibrate for 5 seconds
+        print("Listening...")
+        audio = recognizer.listen(source)
+        
+    try:
+        print("Recognizing...")
+        query = recognizer.recognize_google(audio)
+        print("You said:", query)
+        return query.lower()
+    except sr.UnknownValueError:
+        print("Sorry, I couldn't understand.")
+        return ""
+    except sr.RequestError as e:
+        print(f"Could not request results; {e}")
+        return ""
+
+
+def speak(text):
+    engine = pyttsx3.init()
+    
+    # Configure the voice to use a female voice (change the voice ID according to your system)
+    voices = engine.getProperty('voices')
+    for voice in voices:
+        if "zira" in voice.name.lower():
+            engine.setProperty('voice', voice.id)
+            break
+    
+    engine.say(text)
+    engine.runAndWait()
+
+def search_and_answer(query):
+    try:
+        search_results = list(search(query, num_results=1))
+        if search_results:
+            result_url = search_results[0]
+            page = requests.get(result_url)
+            soup = BeautifulSoup(page.content, 'html.parser')
+            paragraphs = soup.find_all('p')  # Find all paragraphs in the page
+
+            # Extract the content of the first paragraph
+            first_paragraph = paragraphs[0].get_text() if paragraphs else ""
+
+            return first_paragraph, paragraphs[1:]  # Return the first paragraph and remaining paragraphs
+        else:
+            return "I'm sorry, I couldn't find an answer.", []
+    except Exception as e:
+        print(f"Error during web search: {e}")
+        return "I'm sorry, I couldn't find an answer.", []
+
+def get_weather_forecast(city, day):
+    # Replace 'YOUR_API_KEY' with your actual OpenWeather API key
+    api_key = '0ebee6bfb6a55b6a6913af3abb55e93b'
+    base_url = f'http://api.openweathermap.org/data/2.5/forecast'
+
+    # Construct the request parameters
+    params = {
+        'q': city,
+        'appid': api_key,
+        'units': 'metric',  # Change to 'imperial' for Fahrenheit
+    }
+
+    response = requests.get(base_url, params=params)
+    weather_data = response.json()
+
+    desired_date = datetime.datetime.today() + datetime.timedelta(days=day)
+    desired_date_str = desired_date.strftime('%Y-%m-%d')
+
+    forecast = None  # Initialize to None
+    for forecast_entry in weather_data['list']:
+        timestamp = forecast_entry['dt']
+        forecast_date = datetime.datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d')
+
+        if forecast_date == desired_date_str:
+            temperature = forecast_entry['main']['temp']
+            description = forecast_entry['weather'][0]['description']
+            forecast = f"At {timestamp}, temperature: {temperature}°C, description: {description}"
+            break  # Stop after finding the first forecast for the desired day
+    return forecast
+
+def main():
+    current_paragraphs = []
+    print("Virtual Assistant activated. Say 'Goodbye' to exit.")
+    while True:
+        user_query = recognize_speech()
+        if user_query:
+            if "hello" in user_query:
+                answer = "Hello! How can I help you?"
+            elif "goodbye" in user_query:
+                answer = "Goodbye! Have a great day."
+                speak(answer)
+                print("Virtual Assistant deactivated.")
+                break
+            elif "bye" in user_query:
+                answer = "Goodbye! Have a great day."
+                speak(answer)
+                print("Virtual Assistant deactivated.")
+                break
+            elif "weather" in user_query:
+               answer = "Sure, which city's weather forecast would you like to know?"
+               print("Answer:", answer)
+               speak(answer)
+    
+               city_query = recognize_speech()
+               if city_query:
+                 city = city_query.capitalize()  # Capitalize the city name
+        
+                 day_mappings = {
+                    "today": 0,
+                    "tomorrow": 1,
+                    "monday": 0,  # Replace with actual day indices
+                    "tuesday": 1,
+                    "wednesday": 2,
+                    "thursday": 3,
+                    "friday": 4,
+                    "saturday": 5,
+                    "sunday": 6
+                 }
+         
+                 day = 0  # Default to today
+                 for keyword, index in day_mappings.items():
+                      if keyword in user_query:
+                           day = index
+                           break
+                      
+                 forecast = get_weather_forecast(city, day)
+                 print(forecast)
+                 speak(forecast)
+
+            elif any(question_word in user_query for question_word in ["what", "who", "where", "when", "why", "how"]):
+                search_query = user_query
+                if not current_paragraphs:
+                    answer, current_paragraphs = search_and_answer(search_query)
+                else:
+                    answer = current_paragraphs[0].get_text()
+                    current_paragraphs = current_paragraphs[1:]
+            elif "continue" in user_query:
+                if current_paragraphs:
+                    answer = current_paragraphs[0].get_text()
+                    current_paragraphs = current_paragraphs[1:]
+                else:
+                    answer = "No more content to continue reading."
+            else:
+                answer = "I'm sorry, I can't perform that action."
+            
+            print("Answer:", answer)
+            speak(answer)
+
+if __name__ == "__main__":
+    main()
